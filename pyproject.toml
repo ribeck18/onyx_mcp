@@ -1,0 +1,10 @@
+[project]
+name = "onyx-web"
+version = "0.1.0"
+description = "MCP that interacts with onyx_web to keep track of construction projects."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.28.1",
+    "mcp[cli]>=1.28.0",
+]
