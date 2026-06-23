@@ -1,5 +1,9 @@
+from onyx import mcp
+import projects
+
+
 def main():
-    print("Hello from onyx-web!")
+    mcp.run()
 
 
 if __name__ == "__main__":

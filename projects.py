@@ -1,11 +1,15 @@
 import json
+import uuid
 
 import httpx
-from mcp.server.fastmcp import FastMCP
 
-from onyx import get_api, post_api, patch_api
+from onyx import get_api, post_api, patch_api, mcp
 
 
+staged_projects = {}
+
+
+@mcp.tool()
 async def list_all_projects() -> str:
     """Gets a complete list of all the exisiting projects.
 
@@ -33,6 +37,7 @@ async def list_all_projects() -> str:
     return json.dumps(projects, indent=4)
 
 
+@mcp.tool()
 async def get_single_project(project_id: int) -> str:
     """
     Gets a single project from the database. Use this when you need to retrieve a project, project_id is a primary key from the database Usually users will not know the primary key and will mention a project name or project_number. Use list_all_projects to match an id to a project the user mentions.
@@ -49,6 +54,7 @@ async def get_single_project(project_id: int) -> str:
     return json.dumps(result, indent=4)
 
 
+@mcp.tool()
 async def create_project(
     project_number: str, project_name: str, project_description: str | None = None
 ) -> str:
@@ -69,23 +75,42 @@ async def create_project(
     return json.dumps(result, indent=4)
 
 
-async def update_existing_project(
+@mcp.tool()
+async def stage_project_update(
     project_id: int,
     project_number: str | None = None,
     project_name: str | None = None,
     project_description: str | None = None,
 ) -> str:
-    """Make updates to an exisiting project.
-    Only make updates to fields that the user has explicitly asked you to update.
+    """Stage updates to an exisiting project.
+    This tool is used when you need to make updates to a project. You should show the user the result of this function, and ask them for approval.
+    Only make updates to fields that the user has explicitly asked you to update. Do not share the stage_key that this function returns with the user.
     """
-    payload = {}
+    project = {}
+    project["id"] = project_id
     if project_number is not None:
-        payload["project_number"] = project_number
+        project["project_number"] = project_number
     if project_name is not None:
-        payload["name"] = project_name
+        project["name"] = project_name
     if project_description is not None:
-        payload["description"] = project_description
+        project["description"] = project_description
 
+    stage_key = str(uuid.uuid4())
+
+    staged_projects[stage_key] = project
+
+    return f"The updates are staged, the staged key is {stage_key}."
+
+
+@mcp.tool()
+async def finalize_project_update(stage_key: str) -> str:
+    """Complete a project update. Pass the stage key created with stage_project_update, to finalize a project update. Only use this function if the user has confirmed that they agree with the changes proposed when stage_project_updates was ran."""
+    try:
+        payload = staged_projects[stage_key]
+    except ValueError:
+        return f"No staged project is associated with {stage_key}"
+
+    project_id = payload["id"]
     try:
         result = await patch_api(path=f"projects/{project_id}", payload=payload)
 

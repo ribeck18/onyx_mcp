@@ -1,5 +1,3 @@
-from typing import Any
-
 import httpx
 from mcp.server.fastmcp import FastMCP
 
@@ -7,7 +5,7 @@ from mcp.server.fastmcp import FastMCP
 mcp = FastMCP("onyx")
 
 
-ONYX_URL = ""
+ONYX_URL = "http://127.0.0.1:8000"
 USER_AGENT = "onyx-app/1.0"
 
 
