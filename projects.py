@@ -3,7 +3,7 @@ import uuid
 
 import httpx
 
-from onyx import get_api, post_api, patch_api, mcp
+from onyx import AuthError, get_api, post_api, patch_api, mcp
 
 
 staged_projects = {}
@@ -18,6 +18,8 @@ async def list_all_projects() -> str:
     """
     try:
         result = await get_api("projects")
+    except AuthError as err:
+        return str(err)
     except httpx.HTTPStatusError as err:
         if err.response.status_code == 404:
             return "The projects endpoint could not be found (check the path)."
@@ -44,6 +46,8 @@ async def get_single_project(project_id: int) -> str:
     """
     try:
         result = await get_api("projects")
+    except AuthError as err:
+        return str(err)
     except httpx.HTTPStatusError as err:
         if err.response.status_code == 404:
             return f"Project with id {project_id} could not be found."
@@ -70,7 +74,12 @@ async def create_project(
         "description": project_description,
     }
 
-    result = await post_api(path="projects", payload=payload)
+    try:
+        result = await post_api(path="projects", payload=payload)
+    except AuthError as err:
+        return str(err)
+    except httpx.RequestError as err:
+        return f"Could not reach the onyx_web server: {err}"
 
     return json.dumps(result, indent=4)
 
@@ -114,6 +123,8 @@ async def finalize_project_update(stage_key: str) -> str:
     try:
         result = await patch_api(path=f"projects/{project_id}", payload=payload)
 
+    except AuthError as err:
+        return str(err)
     except httpx.HTTPStatusError as err:
         if err.response.status_code == 404:
             return f"No project with id {project_id} could be found."
