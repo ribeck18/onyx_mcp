@@ -6,9 +6,9 @@ from typing import Literal
 
 import httpx
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response, StreamingResponse
 
-from config import user_agent
+from config import onyx_url, user_agent
 from onyx import AuthError, mcp, post_file_api
 
 
@@ -102,3 +102,70 @@ async def receive_upload(request: Request) -> JSONResponse:
         return JSONResponse({"error": "Could not reach Onyx."}, status_code=502)
 
     return JSONResponse({"submitted": True, "vdi": result})
+
+
+@mcp.custom_route("/downloads/{token}", methods=["GET"])
+async def serve_download(request: Request) -> Response:
+    download = consume_transfer(request.path_params["token"], "download")
+    if download is None:
+        return JSONResponse(
+            {
+                "error": "Download link is invalid or expired. Ask the assistant "
+                "to start the download again."
+            },
+            status_code=404,
+        )
+
+    # Onyx's status must be checked before any bytes are relayed to the
+    # caller, so the stream is opened manually (client.send(..., stream=True))
+    # rather than inside a `with client.stream(...)` block. On the happy path
+    # the client and response stay open for the life of the StreamingResponse
+    # and are closed by the generator's `finally`; on every error path they
+    # are closed here before returning JSON.
+    headers = {"Authorization": f"Bearer {download.pat}", "User-Agent": user_agent}
+    client = httpx.AsyncClient(timeout=httpx.Timeout(60.0, read=300.0))
+    try:
+        onyx_response = await client.send(
+            client.build_request(
+                "GET",
+                f"{onyx_url}/api/files/{download.file_id}",
+                params={"download": 1},
+                headers=headers,
+            ),
+            stream=True,
+        )
+    except httpx.RequestError:
+        await client.aclose()
+        return JSONResponse({"error": "Could not reach Onyx."}, status_code=502)
+
+    if onyx_response.status_code != 200:
+        await onyx_response.aclose()
+        await client.aclose()
+        if onyx_response.status_code == 401:
+            return JSONResponse(
+                {
+                    "error": "Onyx rejected the stored credentials. Generate a "
+                    "new Personal Access Token, reconnect, and start the "
+                    "download again."
+                },
+                status_code=502,
+            )
+        return JSONResponse(
+            {"error": f"Onyx rejected the download ({onyx_response.status_code})."},
+            status_code=502,
+        )
+
+    async def relay():
+        try:
+            async for chunk in onyx_response.aiter_bytes():
+                yield chunk
+        finally:
+            await onyx_response.aclose()
+            await client.aclose()
+
+    response_headers = {
+        name: onyx_response.headers[name]
+        for name in ("content-type", "content-disposition")
+        if name in onyx_response.headers
+    }
+    return StreamingResponse(relay(), headers=response_headers)
