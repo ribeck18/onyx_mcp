@@ -45,7 +45,7 @@ async def get_single_project(project_id: int) -> str:
     Gets a single project from the database. Use this when you need to retrieve a project, project_id is a primary key from the database Usually users will not know the primary key and will mention a project name or project_number. Use list_all_projects to match an id to a project the user mentions.
     """
     try:
-        result = await get_api("projects")
+        result = await get_api(f"projects/{project_id}")
     except AuthError as err:
         return str(err)
     except httpx.HTTPStatusError as err:
