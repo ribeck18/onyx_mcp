@@ -23,4 +23,14 @@ If your token expires or gets revoked, you'll get a clear message telling you to
 
 ## Import note for server setup
 
-Requires Python 3.12+. Put the Onyx URL and user-agent in a `.env` file (see `.env` expectations in the code), then start it with `uv run main.py`. It serves all users from one process — each request carries the user's own token, so the server holds no credentials itself.
+Requires Python 3.12+. Put the Onyx URL, user-agent, and the MCP's public base URL in a `.env` file, then start it with `uv run main.py`:
+
+```
+ONYX_URL=https://your-onyx-host
+USER_AGENT=onyx-app/1.0
+MCP_PUBLIC_URL=https://your-mcp-host   # externally reachable base URL of this MCP; used to build one-time upload links (http://localhost:8000 for local dev)
+```
+
+It serves all users from one process — each request carries the user's own token, so the server holds no credentials itself.
+
+**Run exactly one process (one uvicorn worker).** Pending file transfers (the one-time upload links used to submit documents) live in in-memory state, so the server must never be scaled to multiple workers or replicas. `uv run main.py` already does the right thing. If the server restarts, any pending upload links are dropped — just ask the assistant to start the submission again.

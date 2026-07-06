@@ -13,3 +13,4 @@ def get_env_var(var_name: str):
 
 onyx_url = get_env_var("ONYX_URL")
 user_agent = get_env_var("USER_AGENT")
+mcp_public_url = get_env_var("MCP_PUBLIC_URL")

@@ -57,6 +57,32 @@ async def post_api(path: str, payload: dict | None = None) -> dict | list:
     return result.json()
 
 
+async def post_file_api(
+    path: str,
+    file_bytes: bytes,
+    filename: str,
+    content_type: str = "application/pdf",
+    form_fields: dict | None = None,
+    headers: dict | None = None,
+) -> dict | list:
+    """POSTs multipart/form-data to the api. Used for endpoints that take file
+    uploads (vdi submit/return). Raises on failure like post_api. The headers
+    override exists for callers outside a live tool call (e.g. the upload
+    route), where the PAT comes from the pending-transfer store instead of the
+    request context."""
+    files = {"file": (filename, file_bytes, content_type)}
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        result = await client.post(
+            f"{onyx_url}/api/{path}",
+            files=files,
+            data=form_fields,
+            headers=headers if headers is not None else _headers(),
+        )
+        _raise_for_status(result)
+
+    return result.json()
+
+
 async def patch_api(path: str, payload: dict | None = None) -> dict | list:
     """Makes a patch call to the api, raises on error on failure. Handle specfic errors in tool."""
     async with httpx.AsyncClient(timeout=10.0) as client:

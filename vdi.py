@@ -1,9 +1,15 @@
 import json
+import time
 
 import httpx
 import enum
 
-from onyx import AuthError, get_api, post_api, patch_api, mcp
+from config import mcp_public_url
+from onyx import AuthError, get_api, post_api, patch_api, mcp, _user_token
+from transfers import PendingTransfer, TRANSFER_TTL_SECONDS, create_transfer
+
+
+SUBMITTABLE_STATUSES = {"not_started", "b", "c"}
 
 
 ##Enums - approval code, submit code
@@ -162,9 +168,63 @@ async def create_new_vendor_data_item(
     return json.dumps(new_vdi, indent=4)
 
 
-async def get_submit_file_from_revision() -> bytes:
-    pass
+@mcp.tool()
+async def submit_vdi(vdi_id: int, filename: str) -> str:
+    """Submits a document to a vendor data item, opening its next revision.
+    Returns a one-time upload URL and a curl command. Before running that
+    command, state to the user exactly which file you are about to submit and
+    to which vendor data item, and get their confirmation — a submittal is
+    permanent revision history and cannot be unsent. Run the command on the
+    machine that has the file; the submission completes when the upload
+    finishes. The upload URL expires in 10 minutes and works exactly once.
+    Never show the user primary keys.
+    """
+    try:
+        vdi = await get_api(f"vdi/{vdi_id}")
+    except AuthError as err:
+        return str(err)
+    except httpx.HTTPStatusError as err:
+        if err.response.status_code == 404:
+            return f"Vendor data item with id {vdi_id} could not be found."
+        raise
+    except httpx.RequestError as err:
+        return f"Could not reach the onyx_web server: {err}"
 
+    status = vdi.get("status")
+    if status not in SUBMITTABLE_STATUSES:
+        return (
+            f"This vendor data item cannot be submitted from its current "
+            f"status ({status}). A submittal is only possible when the item "
+            f"is not started or its last return was code B or C."
+        )
 
-async def get_return_file_from_revison() -> bytes:
-    pass
+    token = create_transfer(
+        PendingTransfer(
+            kind="upload",
+            pat=_user_token(),
+            expires_at=time.time() + TRANSFER_TTL_SECONDS,
+            purpose="submit",
+            vdi_id=vdi_id,
+            filename=filename,
+        )
+    )
+
+    return (
+        "Upload link created (expires in 10 minutes, single use).\n"
+        "\n"
+        "BEFORE uploading: tell the user which file you are submitting and to "
+        "which vendor data item, and wait for their confirmation. A submittal "
+        "is permanent revision history.\n"
+        "\n"
+        "Then run this on the machine that has the file (not in a remote "
+        "sandbox):\n"
+        "\n"
+        f'    curl -sS -T "<local path to file>" "{mcp_public_url}/uploads/{token}"\n'
+        "\n"
+        "On Windows/PowerShell use `curl.exe` (plain `curl` is an alias for "
+        "Invoke-WebRequest and takes different flags).\n"
+        "\n"
+        "The response will confirm the revision was opened. Verify with "
+        "get_revisions_for_vdi if needed. If the link has expired, simply "
+        "start over by calling submit_vdi again."
+    )
