@@ -1,5 +1,6 @@
 import json
 import time
+import uuid
 
 import httpx
 import enum
@@ -10,6 +11,7 @@ from transfers import PendingTransfer, TRANSFER_TTL_SECONDS, create_transfer
 
 
 SUBMITTABLE_STATUSES = {"not_started", "b", "c"}
+RETURNABLE_STATUSES = {"submitted"}
 
 
 ##Enums - approval code, submit code
@@ -47,6 +49,27 @@ class RevisionSide(enum.StrEnum):
 
     SUBMITTAL = "submittal"
     RETURN = "return"
+
+
+class ReturnCode(enum.StrEnum):
+    """The buyer's decision on a submittal. A and D approve the vendor data
+    item; B and C reject it and require a resubmittal."""
+
+    A = "a"  # approved
+    B = "b"  # rejected, resubmittal required
+    C = "c"  # rejected, resubmittal required
+    D = "d"  # approved
+
+
+RETURN_CODE_MEANINGS = {
+    ReturnCode.A: "approved",
+    ReturnCode.B: "rejected — resubmittal required",
+    ReturnCode.C: "rejected — resubmittal required",
+    ReturnCode.D: "approved",
+}
+
+
+staged_vdi_returns = {}
 
 
 @mcp.tool()
@@ -301,4 +324,122 @@ async def get_revision_file(
         "\n"
         "The file is saved under its original name. If the link has expired, "
         "simply start over by calling get_revision_file again."
+    )
+
+
+@mcp.tool()
+async def stage_vdi_return(
+    vdi_id: int,
+    return_code: ReturnCode,
+    filename: str,
+    comments: str | None = None,
+) -> str:
+    """Stages the recording of the buyer's return on a vendor data item — the
+    return code, optional comments, and the returned document. This records
+    the buyer's decision and changes the item's status, so it is a two-step
+    ceremony: this tool stages the return and returns a summary; show that
+    summary to the user and get their explicit approval, then call
+    finalize_vdi_return. Do not share the stage_key that this function returns
+    with the user.
+
+    return_code is an enum with the following values:
+    "a"  # approved
+    "b"  # rejected, resubmittal required
+    "c"  # rejected, resubmittal required
+    "d"  # approved
+
+    The vdi_id is an internal primary key; never reveal it to the user.
+    """
+    try:
+        vdi = await get_api(f"vdi/{vdi_id}")
+    except AuthError as err:
+        return str(err)
+    except httpx.HTTPStatusError as err:
+        if err.response.status_code == 404:
+            return f"Vendor data item with id {vdi_id} could not be found."
+        raise
+    except httpx.RequestError as err:
+        return f"Could not reach the onyx_web server: {err}"
+
+    status = vdi.get("status")
+    if status not in RETURNABLE_STATUSES:
+        return (
+            f"This vendor data item cannot be returned from its current "
+            f"status ({status}). A return is only possible while the item is "
+            f"out for review (submitted)."
+        )
+
+    stage_key = str(uuid.uuid4())
+    staged_vdi_returns[stage_key] = {
+        "vdi_id": vdi_id,
+        "vdi_name": vdi.get("name"),
+        "return_code": return_code.value,
+        "filename": filename,
+        "comments": comments,
+    }
+
+    return (
+        "The return is staged. Show the user this summary and wait for their "
+        "explicit approval before finalizing:\n"
+        "\n"
+        f"  Vendor data item: {vdi.get('name')}\n"
+        f"  Return code: {return_code.value.upper()} "
+        f"({RETURN_CODE_MEANINGS[return_code]})\n"
+        f"  Comments: {comments if comments else '(none)'}\n"
+        f"  Returned document: {filename}\n"
+        "\n"
+        f"Once the user approves, call finalize_vdi_return with stage key "
+        f"{stage_key}. Do not show the stage key to the user."
+    )
+
+
+@mcp.tool()
+async def finalize_vdi_return(stage_key: str) -> str:
+    """Completes a staged VDI return. Pass the stage key created by
+    stage_vdi_return. Only use this function after the user has explicitly
+    approved the staged summary. Returns a one-time upload URL and a curl
+    command; the return is recorded when the returned document finishes
+    uploading. The upload URL expires in 10 minutes and works exactly once.
+    Do not show the user the stage key or any primary keys.
+    """
+    staged = staged_vdi_returns.pop(stage_key, None)
+    if staged is None:
+        return (
+            "No staged return matches that stage key. It may have expired or "
+            "already been finalized. Start over by calling stage_vdi_return."
+        )
+
+    try:
+        pat = _user_token()
+    except AuthError as err:
+        return str(err)
+
+    token = create_transfer(
+        PendingTransfer(
+            kind="upload",
+            pat=pat,
+            expires_at=time.time() + TRANSFER_TTL_SECONDS,
+            purpose="return",
+            vdi_id=staged["vdi_id"],
+            filename=staged["filename"],
+            return_code=staged["return_code"],
+            comments=staged["comments"],
+        )
+    )
+
+    return (
+        "Upload link created (expires in 10 minutes, single use).\n"
+        "\n"
+        "The user has already approved this return via the staged summary, "
+        "so no further confirmation is needed. Run this on the machine that "
+        "has the file (not in a remote sandbox):\n"
+        "\n"
+        f'    curl -sS -T "<local path to file>" "{mcp_public_url}/uploads/{token}"\n'
+        "\n"
+        "On Windows/PowerShell use `curl.exe` (plain `curl` is an alias for "
+        "Invoke-WebRequest and takes different flags).\n"
+        "\n"
+        "The response will confirm the return was recorded. Verify with "
+        "get_revisions_for_vdi if needed. If the link has expired, start over "
+        "from stage_vdi_return."
     )

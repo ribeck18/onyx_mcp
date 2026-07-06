@@ -25,6 +25,8 @@ class PendingTransfer:
     vdi_id: int | None = None  # upload: which VDI to submit to
     filename: str | None = None  # upload: original filename
     file_id: int | None = None  # download: which Onyx file to stream
+    return_code: str | None = None  # upload, purpose "return": buyer's code (a/b/c/d)
+    comments: str | None = None  # upload, purpose "return": buyer's comments
 
 
 pending_transfers: dict[str, PendingTransfer] = {}
@@ -75,32 +77,46 @@ async def receive_upload(request: Request) -> JSONResponse:
     if len(body) > MAX_UPLOAD_BYTES:
         return JSONResponse({"error": "File exceeds the size limit."}, status_code=413)
 
+    if upload.purpose == "return":
+        path = f"vdi/{upload.vdi_id}/return"
+        form_fields = {"return_code": upload.return_code}
+        if upload.comments is not None:
+            form_fields["comments"] = upload.comments
+        action = "return"
+    else:
+        path = f"vdi/{upload.vdi_id}/submit"
+        form_fields = None
+        action = "submission"
+
     content_type = mimetypes.guess_type(upload.filename)[0] or "application/pdf"
     headers = {"Authorization": f"Bearer {upload.pat}", "User-Agent": user_agent}
     try:
         result = await post_file_api(
-            f"vdi/{upload.vdi_id}/submit",
+            path,
             body,
             upload.filename,
             content_type=content_type,
+            form_fields=form_fields,
             headers=headers,
         )
     except AuthError:
         return JSONResponse(
             {
                 "error": "Onyx rejected the stored credentials. Generate a new "
-                "Personal Access Token, reconnect, and start the submission again."
+                f"Personal Access Token, reconnect, and start the {action} again."
             },
             status_code=502,
         )
     except httpx.HTTPStatusError as err:
         return JSONResponse(
-            {"error": f"Onyx rejected the submission ({err.response.status_code})."},
+            {"error": f"Onyx rejected the {action} ({err.response.status_code})."},
             status_code=502,
         )
     except httpx.RequestError:
         return JSONResponse({"error": "Could not reach Onyx."}, status_code=502)
 
+    if upload.purpose == "return":
+        return JSONResponse({"returned": True, "vdi": result})
     return JSONResponse({"submitted": True, "vdi": result})
 
 

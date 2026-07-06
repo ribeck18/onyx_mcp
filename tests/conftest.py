@@ -49,10 +49,13 @@ async def app(anyio_backend):
 @pytest.fixture(autouse=True)
 def clean_transfer_store():
     import transfers
+    import vdi
 
     transfers.pending_transfers.clear()
+    vdi.staged_vdi_returns.clear()
     yield
     transfers.pending_transfers.clear()
+    vdi.staged_vdi_returns.clear()
 
 
 @pytest.fixture
