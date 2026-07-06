@@ -1,5 +1,6 @@
 from onyx import mcp
 import projects
+import vdi
 
 
 def main():

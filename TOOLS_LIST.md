@@ -71,24 +71,6 @@ confirmation pattern for mutations.
 |----------------|-------|-------|
 | `download_file` | `GET /files/{file_id}` | Returns raw bytes. Binary response — decide how to surface (link, path, or base64) in an MCP context. |
 
-### Tokens (`/tokens`) — self-service PAT management
-| Candidate tool | Route | Notes |
-|----------------|-------|-------|
-| `list_tokens` | `GET /tokens` | Metadata only, never raw secrets. |
-| `create_token` | `POST /tokens` | Returns the raw secret exactly once. Sensitive. |
-| `revoke_token` | `POST /tokens/{token_id}/revoke` | Revoke one owned token. |
-
-### Users / Admin (`/users`) — admin-gated
-| Candidate tool | Route | Notes |
-|----------------|-------|-------|
-| `list_users` | `GET /users` | Admin only. |
-| `provision_user` | `POST /users` | Provision by email. |
-| `deactivate_user` | `POST /users/{id}/deactivate` | Cannot deactivate self. |
-| `reactivate_user` | `POST /users/{id}/reactivate` | |
-| `promote_user` | `POST /users/{id}/promote` | Grant admin. |
-| `demote_user` | `POST /users/{id}/demote` | Break-glass admins can't be demoted. |
-| `delete_user` | `DELETE /users/{id}` | Only for never-logged-in users. |
-
 ---
 
 ## 4. Suggested priority
