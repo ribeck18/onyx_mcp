@@ -7,7 +7,7 @@ from onyx import AuthError, get_api, post_api, patch_api, mcp
 
 
 ##Enums - approval code, submit code
-class SubmitCode(enum.Enum):
+class SubmitCode(enum.StrEnum):
     """When a submittal is due relative to the project timeline."""
 
     AC = "ac"  # As Completed
@@ -28,7 +28,7 @@ class SubmitCode(enum.Enum):
     TS = "ts"  # Time of Shipment
 
 
-class ApprovalType(enum.Enum):
+class ApprovalType(enum.StrEnum):
     """Whether a vendor data item requires buyer approval or is informational only."""
 
     MANDATORY_APPROVAL = "mandatory_approval"
