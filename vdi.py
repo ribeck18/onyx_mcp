@@ -1,8 +1,38 @@
 import json
 
 import httpx
+import enum
 
 from onyx import AuthError, get_api, post_api, patch_api, mcp
+
+
+##Enums - approval code, submit code
+class SubmitCode(enum.Enum):
+    """When a submittal is due relative to the project timeline."""
+
+    AC = "ac"  # As Completed
+    AFI = "afi"  # At Final Inspection
+    ARO = "aro"  # After Receipt of Order
+    AT = "at"  # After Test
+    BC = "bc"  # Before Contract Awarded
+    BFA = "bfa"  # Before Final Acceptance
+    BFS = "bfs"  # Before Fabrication Start
+    PDS = "pds"  # Prior to Delivery on Site
+    PS = "ps"  # Prior to Shipment
+    PT = "pt"  # Prior to Test
+    PTC = "ptc"  # Prior to Construction
+    PTI = "pti"  # Prior to Installation
+    PTP = "ptp"  # Prior to Purchase
+    PTW = "ptw"  # Prior to Welding
+    ROS = "ros"  # Prior to Removal Off-Site
+    TS = "ts"  # Time of Shipment
+
+
+class ApprovalType(enum.Enum):
+    """Whether a vendor data item requires buyer approval or is informational only."""
+
+    MANDATORY_APPROVAL = "mandatory_approval"
+    INFORMATION_ONLY = "information_only"
 
 
 @mcp.tool()
@@ -65,6 +95,71 @@ async def get_revisions_for_vdi(vdi_id: int) -> str:
         return f"Could not reach the onyx_web server: {err}"
 
     return json.dumps(revisions, indent=4)
+
+
+@mcp.tool()
+async def create_new_vendor_data_item(
+    project_id: int,
+    item_number: int,
+    name: str,
+    approval_type: ApprovalType,
+    submit_code: SubmitCode,
+    submittal_number: str | None = None,
+    description: str | None = None,
+    spec_drawing_reference: str | None = None,
+    notes: str | None = None,
+) -> str:
+    """Creates a new vendor data item for a project. Use this tool whenever a user wants to add vendor data to a project.
+
+    approval_type is an enum with the following values:
+    "mandatory_approval"
+    "information_only"
+
+    submit_code is also an enum with the following values:
+    "ac"  # As Completed
+    "afi"  # At Final Inspection
+    "aro"  # After Receipt of Order
+    "at"  # After Test
+    "bc"  # Before Contract Awarded
+    "bfa"  # Before Final Acceptance
+    "bfs"  # Before Fabrication Start
+    "pds"  # Prior to Delivery on Site
+    "ps"  # Prior to Shipment
+    "pt"  # Prior to Test
+    "ptc"  # Prior to Construction
+    "pti"  # Prior to Installation
+    "ptp"  # Prior to Purchase
+    "ptw"  # Prior to Welding
+    "ros"  # Prior to Removal Off-Site
+    "ts"  # Time of Shipment
+
+    project_id is a primary key for the database and the user will not know it. They will refer to projects by name or project_number. Never reveal the primary_key (id) of projects or vendor data to the user.
+    """
+
+    try:
+        payload = {
+            "project_id": project_id,
+            "item_number": item_number,
+            "name": name,
+            "approval_type": approval_type,
+            "submit_code": submit_code,
+            "submittal_number": submittal_number,
+            "description": description,
+            "spec_drawing_reference": spec_drawing_reference,
+            "notes": notes,
+        }
+
+        new_vdi = await post_api("vdi", payload=payload)
+    except AuthError as err:
+        return str(err)
+    except httpx.RequestError as err:
+        return f"Could not reach the onyx_web server: {err}"
+    except httpx.HTTPStatusError as err:
+        if err.response.status_code == 404:
+            return f"Project with id {project_id} could not be found."
+        raise
+
+    return json.dumps(new_vdi, indent=4)
 
 
 async def get_submit_file_from_revision() -> bytes:

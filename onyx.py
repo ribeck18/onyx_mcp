@@ -14,7 +14,9 @@ class AuthError(Exception):
 def _user_token() -> str:
     """Pulls the bearer token from the current request, raises AuthError if it is missing."""
     request = mcp.get_context().request_context.request
-    authorization = request.headers.get("authorization") if request is not None else None
+    authorization = (
+        request.headers.get("authorization") if request is not None else None
+    )
     if authorization is None or not authorization.lower().startswith("bearer "):
         raise AuthError(
             "Authentication to Onyx failed: no Personal Access Token was supplied. Generate a new token and reconnect."
@@ -47,7 +49,9 @@ async def get_api(path: str) -> dict | list:
 async def post_api(path: str, payload: dict | None = None) -> dict | list:
     """Makes a post call to the api, raises error on failure. handle specific errors in tool"""
     async with httpx.AsyncClient(timeout=10.0) as client:
-        result = await client.post(f"{onyx_url}/api/{path}", json=payload, headers=_headers())
+        result = await client.post(
+            f"{onyx_url}/api/{path}", json=payload, headers=_headers()
+        )
         _raise_for_status(result)
 
     return result.json()
@@ -56,7 +60,9 @@ async def post_api(path: str, payload: dict | None = None) -> dict | list:
 async def patch_api(path: str, payload: dict | None = None) -> dict | list:
     """Makes a patch call to the api, raises on error on failure. Handle specfic errors in tool."""
     async with httpx.AsyncClient(timeout=10.0) as client:
-        result = await client.patch(f"{onyx_url}/api/{path}", json=payload, headers=_headers())
+        result = await client.patch(
+            f"{onyx_url}/api/{path}", json=payload, headers=_headers()
+        )
         _raise_for_status(result)
 
     return result.json()
