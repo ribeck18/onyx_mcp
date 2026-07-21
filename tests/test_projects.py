@@ -5,6 +5,7 @@ import json
 
 import pytest
 
+import projects
 from conftest import mcp_session
 
 
@@ -49,3 +50,30 @@ async def test_get_single_project_unknown_id(app, onyx_mock):
     text = await call_get_single_project(app, 999)
 
     assert "Project with id 999 could not be found." in text
+
+
+async def test_finalize_project_update_unknown_stage_key():
+    projects.staged_projects.clear()
+
+    text = await projects.finalize_project_update("missing")
+
+    assert "No staged project is associated with missing" in text
+
+
+async def test_finalize_project_update_consumes_stage_key(monkeypatch):
+    projects.staged_projects.clear()
+    projects.staged_projects["stage-1"] = {"id": 42, "name": "New Name"}
+    calls = []
+
+    async def fake_patch_api(path, payload):
+        calls.append((path, payload))
+        return {"id": 42, "name": "New Name"}
+
+    monkeypatch.setattr(projects, "patch_api", fake_patch_api)
+
+    text = await projects.finalize_project_update("stage-1")
+    replay = await projects.finalize_project_update("stage-1")
+
+    assert calls == [("projects/42", {"id": 42, "name": "New Name"})]
+    assert "The project has been updated" in text
+    assert "No staged project is associated with stage-1" in replay

@@ -114,9 +114,8 @@ async def stage_project_update(
 @mcp.tool()
 async def finalize_project_update(stage_key: str) -> str:
     """Complete a project update. Pass the stage key created with stage_project_update, to finalize a project update. Only use this function if the user has confirmed that they agree with the changes proposed when stage_project_updates was ran."""
-    try:
-        payload = staged_projects[stage_key]
-    except ValueError:
+    payload = staged_projects.pop(stage_key, None)
+    if payload is None:
         return f"No staged project is associated with {stage_key}"
 
     project_id = payload["id"]

@@ -6,7 +6,7 @@ import httpx
 import enum
 
 from config import mcp_public_url
-from onyx import AuthError, get_api, post_api, patch_api, mcp, _user_token
+from onyx import AuthError, get_api, post_api, mcp, _user_token
 from transfers import PendingTransfer, TRANSFER_TTL_SECONDS, create_transfer
 
 
@@ -262,9 +262,7 @@ async def submit_vdi(vdi_id: int, filename: str) -> str:
 
 
 @mcp.tool()
-async def get_revision_file(
-    vdi_id: int, revision_id: int, side: RevisionSide
-) -> str:
+async def get_revision_file(vdi_id: int, revision_id: int, side: RevisionSide) -> str:
     """Downloads a document from a revision of a vendor data item onto the
     user's machine. Use this tool when a user wants a copy of the submittal
     that went out ("submittal") or the buyer's return document ("return") for
