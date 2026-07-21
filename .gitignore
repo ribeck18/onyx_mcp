@@ -16,3 +16,11 @@ wheels/
 .DS_Store
 
 .pi-subagents
+
+# Local teaching workspace
+MISSION.md
+RESOURCES.md
+NOTES.md
+learning-records/
+lessons/
+reference/
