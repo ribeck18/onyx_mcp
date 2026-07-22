@@ -21,16 +21,12 @@ In order to use **Onyx MCP** You first need to setup **Onyx Web** which you can 
 
 If your token expires or gets revoked, you'll get a clear message telling you to generate a new one in Onyx and reconnect.
 
-## Import note for server setup
+## Run locally
 
-Requires Python 3.12+. Put the Onyx URL, user-agent, and the MCP's public base URL in a `.env` file, then start it with `uv run main.py`:
+Set the Onyx URL and your PAT, then start the stdio MCP server:
 
+```sh
+export ONYX_URL=https://your-onyx-host
+export ONYX_PAT=your-personal-access-token
+go run .
 ```
-ONYX_URL=https://your-onyx-host
-USER_AGENT=onyx-app/1.0
-MCP_PUBLIC_URL=https://your-mcp-host   # externally reachable base URL of this MCP; used to build one-time upload links (http://localhost:8000 for local dev)
-```
-
-It serves all users from one process — each request carries the user's own token, so the server holds no credentials itself.
-
-**Run exactly one process (one uvicorn worker).** Pending file transfers (the one-time upload links used to submit documents) live in in-memory state, so the server must never be scaled to multiple workers or replicas. `uv run main.py` already does the right thing. If the server restarts, any pending upload links are dropped — just ask the assistant to start the submission again.
